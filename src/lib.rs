@@ -25,7 +25,7 @@ fn get_stats(ids: Vec<u16>) -> HashMap<(u16, u16), u16> {
 /// An `Option` containing the most frequent pair of elements as `(u8, u8)`.
 /// Returns `None` if the input vector is empty or has only one element.
 pub fn get_most_frequent_pair(ids: Vec<u16>) -> Option<(u16, u16)> {
-    let mut map = get_stats(ids);
+    let map = get_stats(ids);
     let option = map.iter().max_by_key(|&(_, count)| count);
     match option {
         None => return None,
@@ -63,7 +63,7 @@ pub fn merge(ids: Vec<u16>, pair: (u16, u16), idx: u16) -> Vec<u16> {
     result
 }
 
-fn calculate_merges_default(ids: Vec<u16>, vocab_size: u16) -> LinkedHashMap<(u16, u16), u16> {
+pub fn calculate_merges_default(ids: Vec<u16>, vocab_size: u16) -> LinkedHashMap<(u16, u16), u16> {
     return calculate_merges(ids, vocab_size, 256);
 }
 
@@ -85,7 +85,7 @@ fn calculate_merges(ids_orig: Vec<u16>, vocab_size: u16, vocab_start: u16) -> Li
     merges
 }
 
-fn generate_vocab(merges: LinkedHashMap<(u16, u16), u16>) -> LinkedHashMap<u16, Vec<u8>> {
+pub fn generate_vocab(merges: LinkedHashMap<(u16, u16), u16>) -> LinkedHashMap<u16, Vec<u8>> {
     let mut vocab: LinkedHashMap<u16, Vec<u8>> = (0..256).map(|idx| (idx, vec![idx as u8])).collect();
     for ((p0, p1), idx) in merges.iter() {
         let val0 = vocab.get(p0).expect("p0 not found");
@@ -100,7 +100,7 @@ fn generate_and_decode(ids_orig: Vec<u16>, merges: LinkedHashMap<(u16, u16), u16
     decode(ids_orig, vocab)
 }
 
-fn decode(ids: Vec<u16>, vocab: LinkedHashMap<u16, Vec<u8>>) -> String {
+pub fn decode(ids: Vec<u16>, vocab: LinkedHashMap<u16, Vec<u8>>) -> String {
     let mut res: Vec<u8> = Vec::new();
     for idx in ids.iter() {
         let value = vocab.get(idx).expect("idx not found");
@@ -112,7 +112,7 @@ fn decode(ids: Vec<u16>, vocab: LinkedHashMap<u16, Vec<u8>>) -> String {
 fn get_pair_with_lowest_value(stats: HashMap<(u16, u16), u16>, merges: &LinkedHashMap<(u16, u16), u16>) -> (u16, u16) {
     let mut min = std::u16::MAX;
     let mut min_pair = (0, 0);
-    for (pair, count) in stats.iter() {
+    for (pair, _) in stats.iter() {
         let res = merges.get(pair);
         if res.is_some() {
             let code = *res.unwrap();
@@ -125,7 +125,7 @@ fn get_pair_with_lowest_value(stats: HashMap<(u16, u16), u16>, merges: &LinkedHa
     min_pair
 }
 
-fn encode(input: &str, merges: LinkedHashMap<(u16, u16), u16>) -> Vec<u16> {
+pub fn encode(input: &str, merges: LinkedHashMap<(u16, u16), u16>) -> Vec<u16> {
     let mut tokens = convert_to_bytes(input);
     while tokens.len() > 1 {
         let stats = get_stats(tokens.clone());
@@ -241,20 +241,34 @@ mod tests {
     #[test]
     fn encode_decode_simple() {
         let merges = run_calculate_merges();
-        let orig_str = "hello world, While I'm glad to hear about your job opportunity in Dubai, I must admit that I'm a bit skeptical about the salary you mentioned. Ｕｎｉｃｏｄｅ! 🅤🅝🅘🅒🅞🅓🅔‽";
+        let vocab = generate_vocab(merges.clone());
+
+        let orig_str = "hello world, While I'm glad to hear about your job opportunity in Dubai, \
+            I must admit that I'm a bit skeptical about the salary you mentioned. Ｕｎｉｃｏｄｅ! 🅤🅝🅘🅒🅞🅓🅔‽";
         let encoded = encode(orig_str, merges.clone());
         println!("Encoded: {:?}", encoded);
-        let vocab = generate_vocab(merges);
+
         let res = decode(encoded.clone(), vocab);
         println!("Decoded: {:?}", res);
         println!("Compression: {:?}", orig_str.len() as f64 / encoded.len() as f64);
         assert_eq!(res, orig_str);
     }
 
+    #[test]
+    fn encode_decode_complex() {
+        let merges = run_calculate_merges();
+        let vocab = generate_vocab(merges.clone());
+        let complex_str = read_complex_file();
+        let encoded = encode(complex_str.as_str(), merges.clone());
+        let res = decode(encoded.clone(), vocab);
+        println!("Decoded: {:?}", res);
+        assert_eq!(res, complex_str);
+    }
+
     fn run_calculate_merges() -> LinkedHashMap<(u16, u16), u16> {
         let input = read_complex_file();
         let ids = convert_to_bytes(&input);
-        let merges: LinkedHashMap<(u16, u16), u16> = calculate_merges_default(ids, 276);
+        let merges = calculate_merges_default(ids, 276);
         merges
     }
 
